@@ -83,7 +83,7 @@ SCRIPTS_DIR = SKILL_DIR / "scripts"
 TEMPLATES_DIR = SKILL_DIR / "templates"
 
 # ElevenLabs defaults
-DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # "Rachel"
+DEFAULT_VOICE_ID = "nPczCjzI2devNBz1zQrb"  # "Brian" — deep, resonant, professional
 DEFAULT_MODEL_ID = "eleven_turbo_v2_5"
 
 # Recording defaults

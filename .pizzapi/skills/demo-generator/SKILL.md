@@ -95,16 +95,17 @@ The user can:
 
 ### ElevenLabs Voices
 
-The default voice is "Rachel" (clear, professional). To use a different voice, pass `--voice-id` or set it in the script YAML:
+The default voice is "Brian" (deep, resonant, professional). To use a different voice, pass `--voice-id` or set it in the script YAML:
 
 ```yaml
-voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel (default)
+voice_id: "nPczCjzI2devNBz1zQrb"  # Brian (default)
 ```
 
-Popular alternatives:
-- `EXAVITQu4vr4xnSDxMaL` — "Bella" (warm, conversational)
-- `ErXwobaYiN019PkySvjV` — "Antoni" (male, clear)
-- `MF3mGyEYCl7XYWbV9V6O` — "Elli" (young, friendly)
+Other good options for technical demos:
+- `iP95p4xoKVk53GoZ742B` — "Chris" (charming, down-to-earth)
+- `onwK4e9ZLuTAKqWW03F9` — "Daniel" (steady broadcaster, british)
+- `XrExE9yKIg1WjnnlVkGX` — "Matilda" (knowledgable, professional)
+- `SAz9YHcvj6GT2YYXdXww` — "River" (relaxed, neutral)
 
 ### Recording Settings
 
