@@ -103,10 +103,9 @@ def check_dependencies(skip_voice: bool = False, skip_record: bool = False) -> l
     missing = []
 
     if not skip_record:
-        if not shutil.which("asciinema"):
-            missing.append("asciinema (brew install asciinema)")
         if not shutil.which("agg"):
             missing.append("agg (brew install agg)")
+
 
     if not shutil.which("ffmpeg"):
         missing.append("ffmpeg (brew install ffmpeg)")
@@ -193,6 +192,86 @@ def save_script(script: dict[str, Any], path: Path) -> None:
 # Step 2: Terminal Recording (asciinema)
 # ---------------------------------------------------------------------------
 
+def _write_asciicast(
+    commands: list[str],
+    output_cast: Path,
+    cwd: str | None = None,
+    typing_delay: float = DEFAULT_TYPING_DELAY,
+    pause_between: float = DEFAULT_PAUSE_BETWEEN,
+    cols: int = DEFAULT_COLS,
+    rows: int = DEFAULT_ROWS,
+) -> None:
+    """
+    Build an asciicast v2 file directly — no asciinema process needed.
+
+    This is faster and more reliable than spawning asciinema in headless mode.
+    We run each command, capture its output, then write a .cast file with
+    simulated typing + real output.
+    """
+    import time as _time
+
+    output_cast.parent.mkdir(parents=True, exist_ok=True)
+
+    # Collect events: (timestamp, event_type, data)
+    events: list[tuple[float, str, str]] = []
+    clock = 0.0
+
+    for i, cmd in enumerate(commands):
+        # Simulate typing the command
+        for char in cmd:
+            events.append((clock, "o", char))
+            clock += typing_delay
+        events.append((clock, "o", "\r\n"))
+        clock += 0.05
+
+        # Run the command and capture output
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=cwd,
+                timeout=30,
+                env={**os.environ, "TERM": "xterm-256color", "COLUMNS": str(cols), "LINES": str(rows)},
+            )
+            output = result.stdout
+            if result.stderr:
+                output += result.stderr
+        except subprocess.TimeoutExpired:
+            output = "[command timed out]\n"
+        except Exception as e:
+            output = f"[error: {e}]\n"
+
+        if output:
+            # Write output in chunks for realistic appearance
+            chunk_size = 200
+            for j in range(0, len(output), chunk_size):
+                chunk = output[j:j + chunk_size]
+                events.append((clock, "o", chunk))
+                clock += 0.02
+
+        clock += pause_between
+
+    # Add final pause
+    events.append((clock + 1.0, "o", ""))
+
+    # Write asciicast v2 format
+    header = {
+        "version": 2,
+        "width": cols,
+        "height": rows,
+        "timestamp": int(_time.time()),
+        "env": {"SHELL": "/bin/bash", "TERM": "xterm-256color"},
+    }
+
+    with open(output_cast, "w") as f:
+        f.write(json.dumps(header) + "\n")
+        for ts, etype, data in events:
+            if data:  # skip empty events
+                f.write(json.dumps([round(ts, 6), etype, data]) + "\n")
+
+
 def record_scene_commands(
     commands: list[str],
     output_cast: Path,
@@ -203,58 +282,18 @@ def record_scene_commands(
     rows: int = DEFAULT_ROWS,
 ) -> None:
     """
-    Record terminal commands to an asciinema .cast file.
+    Record terminal commands to an asciicast .cast file.
 
-    Builds a shell script that simulates realistic typing, then records
-    it with asciinema.
+    Uses direct asciicast generation (fast, no TTY needed) by default.
     """
-    script_lines = [
-        "#!/bin/bash",
-        "set -e",
-        "",
-        "# Auto-generated demo script",
-        f"export PS1='$ '",
-        "",
-    ]
-
-    for i, cmd in enumerate(commands):
-        # Simulate typing: print each char with a delay
-        for char in cmd:
-            escaped = char.replace("\\", "\\\\").replace("'", "'\\''")
-            script_lines.append(f"printf '{escaped}'")
-            script_lines.append(f"sleep {typing_delay}")
-        script_lines.append("printf '\\n'")
-        script_lines.append(f"sleep 0.1")
-        # Execute the command
-        script_lines.append(cmd)
-        if i < len(commands) - 1:
-            script_lines.append(f"sleep {pause_between}")
-    # Final pause so the output is visible
-    script_lines.append("sleep 1.5")
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
-        f.write("\n".join(script_lines))
-        script_path = f.name
-
-    try:
-        os.chmod(script_path, 0o755)
-        output_cast.parent.mkdir(parents=True, exist_ok=True)
-
-        subprocess.run(
-            [
-                "asciinema", "rec",
-                "--command", f"bash {script_path}",
-                "--cols", str(cols),
-                "--rows", str(rows),
-                "--overwrite",
-                str(output_cast),
-            ],
-            cwd=cwd,
-            check=True,
-            env={**os.environ, "ASCIINEMA_REC": "1"},
-        )
-    finally:
-        os.unlink(script_path)
+    _write_asciicast(
+        commands, output_cast,
+        cwd=cwd,
+        typing_delay=typing_delay,
+        pause_between=pause_between,
+        cols=cols,
+        rows=rows,
+    )
 
 
 def cast_to_gif(cast_file: Path, gif_file: Path, font_size: int = DEFAULT_FONT_SIZE) -> None:
