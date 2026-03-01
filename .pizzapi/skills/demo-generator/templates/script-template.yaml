@@ -1,0 +1,49 @@
+# Demo Script Template
+#
+# Each scene pairs narration (voiceover text) with terminal commands.
+# The voiceover plays while the terminal commands execute on screen.
+#
+# Usage:
+#   python3 generate_demo.py --script this-file.yaml --cwd /path/to/repo
+
+title: "Your Demo Title"
+story_id: "12345"
+
+# Optional: override ElevenLabs voice
+# voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel (default)
+
+# Optional: recording settings
+settings:
+  cols: 120            # Terminal width (characters)
+  rows: 35             # Terminal height (lines)
+  typing_delay: 0.04   # Seconds between simulated keystrokes
+  pause_between: 0.8   # Seconds pause between commands
+  font_size: 16        # Font size in rendered video
+
+scenes:
+  # Scene 1: Introduce the problem
+  - narration: |
+      Here's what we're looking at today.
+      Describe the problem or feature in conversational language.
+    commands:
+      - "# Title or context comment"
+      - "git log --oneline -3"
+
+  # Scene 2: Show the changes
+  - narration: |
+      Let me walk through the changes we made.
+    commands:
+      - "git diff HEAD~1 --stat"
+      - "git diff HEAD~1 -- path/to/key/file.py"
+
+  # Scene 3: Demonstrate it works
+  - narration: |
+      And here's proof that everything works correctly.
+    commands:
+      - "your-test-command-here"
+
+  # Scene 4: Wrap up
+  - narration: |
+      That's it. Clean, tested, and ready to ship.
+    commands:
+      - "echo 'Done ✅'"

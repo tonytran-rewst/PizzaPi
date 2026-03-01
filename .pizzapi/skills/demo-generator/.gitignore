@@ -1,0 +1,7 @@
+# Generated output — don't commit recordings/videos
+output/
+scripts/
+
+# Python
+__pycache__/
+*.pyc

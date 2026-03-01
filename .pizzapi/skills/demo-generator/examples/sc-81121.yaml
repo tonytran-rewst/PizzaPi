@@ -1,0 +1,51 @@
+# Example: Demo for SC-81121 — RoboRewsty terminal transitions fix
+#
+# Run with:
+#   python3 generate_demo.py --script examples/sc-81121.yaml \
+#     --cwd /path/to/rewst-app/.git/beads-worktrees/chore/sc-81121/roborewsty-cannot-create-a-transition
+
+title: "Fix: RoboRewsty terminal transitions"
+story_id: "81121"
+
+settings:
+  cols: 120
+  rows: 35
+  typing_delay: 0.03
+  pause_between: 1.0
+
+scenes:
+  - narration: |
+      RoboRewsty, our AI workflow builder, had a bug where it couldn't create
+      data aliases on single-task workflows. It would get stuck in a loop
+      because the link workflow tasks tool required at least one destination task,
+      and with only one task, there was nowhere to point the transition.
+    commands:
+      - "# SC-81121: RoboRewsty - Cannot create a transition without a destination"
+      - "git log --oneline -1"
+
+  - narration: |
+      The fix touches four files. The core change is in the link workflow tasks
+      tool, with a matching update to the modify tool, prompt guidance for the
+      AI, and comprehensive tests.
+    commands:
+      - "git diff HEAD~1 --stat"
+
+  - narration: |
+      Here's the key change. The toTaskIds field now defaults to an empty list
+      instead of being required. We also added a guardrail — terminal transitions
+      must include at least one publish entry, preventing accidental empty
+      transitions.
+    commands:
+      - "git diff HEAD~1 -- packages/engine/engine/roborewsty/tools/workflow_tools/link_workflow_tasks_tool.py"
+
+  - narration: |
+      And here are all 760 tests passing, including 11 new ones that cover
+      terminal transitions and the exact scenario from the bug report.
+    commands:
+      - "cd packages/engine && PYTHONPATH=. .venv/bin/python -m pytest tests/engine/roborewsty/tools/workflow_tools/ -q --timeout=30 2>&1 | tail -3"
+
+  - narration: |
+      That's it. Single-task workflows with data aliases now work as expected.
+      Clean, tested, and backwards compatible.
+    commands:
+      - "echo '✅ SC-81121 — Fixed and ready for review'"
