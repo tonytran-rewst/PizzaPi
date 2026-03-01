@@ -14,9 +14,10 @@ Usage:
   python3 generate_demo.py --script my_script.yaml --voice-only
   python3 generate_demo.py --script my_script.yaml --record-only
 
-Dependencies:
+System dependencies (brew):
   brew install asciinema agg ffmpeg
-  pip3 install elevenlabs pyyaml
+
+Python dependencies are auto-installed into a managed venv.
 """
 
 from __future__ import annotations
@@ -28,21 +29,55 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import venv
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml
-except ImportError:
-    print("ERROR: pip3 install pyyaml", file=sys.stderr)
-    sys.exit(1)
+
+# ---------------------------------------------------------------------------
+# Self-bootstrapping venv
+# ---------------------------------------------------------------------------
+
+SKILL_DIR = Path(__file__).parent
+VENV_DIR = SKILL_DIR / ".venv"
+VENV_PYTHON = VENV_DIR / "bin" / "python"
+PIP_DEPS = ["elevenlabs", "pyyaml"]
+
+
+def _ensure_venv() -> None:
+    """Create the skill's venv and install dependencies if needed."""
+    if VENV_PYTHON.exists():
+        return
+
+    print("🔧 Setting up demo-generator venv (one-time)...")
+    venv.create(str(VENV_DIR), with_pip=True, clear=True)
+    subprocess.run(
+        [str(VENV_PYTHON), "-m", "pip", "install", "--quiet", *PIP_DEPS],
+        check=True,
+    )
+    print("✅ Venv ready\n")
+
+
+def _reexec_in_venv() -> None:
+    """Re-execute this script inside the managed venv if we're not already in it."""
+    # Already running from the venv — nothing to do
+    if Path(sys.executable).resolve() == VENV_PYTHON.resolve():
+        return
+
+    _ensure_venv()
+    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), *sys.argv])
+
+
+# Bootstrap before any third-party imports
+_reexec_in_venv()
+
+import yaml  # noqa: E402  — available after venv bootstrap
 
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
-SKILL_DIR = Path(__file__).parent
 OUTPUT_DIR = SKILL_DIR / "output"
 SCRIPTS_DIR = SKILL_DIR / "scripts"
 TEMPLATES_DIR = SKILL_DIR / "templates"
@@ -77,11 +112,6 @@ def check_dependencies(skip_voice: bool = False, skip_record: bool = False) -> l
         missing.append("ffmpeg (brew install ffmpeg)")
 
     if not skip_voice:
-        try:
-            import elevenlabs  # noqa: F401
-        except ImportError:
-            missing.append("elevenlabs (pip3 install elevenlabs)")
-
         if not os.environ.get("ELEVENLABS_API_KEY"):
             missing.append("ELEVENLABS_API_KEY environment variable")
 

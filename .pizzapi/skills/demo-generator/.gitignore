@@ -2,6 +2,9 @@
 output/
 scripts/
 
+# Managed venv (auto-created on first run)
+.venv/
+
 # Python
 __pycache__/
 *.pyc

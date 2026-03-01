@@ -12,12 +12,13 @@ Use this when the user asks to:
 
 ## Prerequisites
 
-The pipeline requires these tools installed on the system:
+System tools (one-time install):
 
 ```bash
 brew install asciinema agg ffmpeg
-pip3 install elevenlabs pyyaml
 ```
+
+Python dependencies (`elevenlabs`, `pyyaml`) are **auto-installed** into a managed venv on first run — no manual pip install needed.
 
 The `ELEVENLABS_API_KEY` environment variable must be set for voiceover generation.
 
