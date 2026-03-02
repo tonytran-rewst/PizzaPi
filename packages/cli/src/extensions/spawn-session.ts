@@ -135,11 +135,16 @@ export const spawnSessionExtension: ExtensionFactory = (pi) => {
 
             const cwd = params.cwd ?? process.cwd();
 
+            // Include the current session's ID as the parent so the spawned
+            // session can be identified as a sub-agent in the UI.
+            const currentSessionId = process.env.PIZZAPI_SESSION_ID?.trim() || null;
+
             // Build the spawn request
             const body: Record<string, unknown> = {
                 runnerId,
                 cwd,
                 prompt,
+                ...(currentSessionId ? { parentSessionId: currentSessionId } : {}),
             };
 
             if (params.model) {

@@ -31,6 +31,8 @@ export interface HubServerToClientEvents {
     model: ModelInfo | null;
     runnerId?: string;
     runnerName?: string | null;
+    parentSessionId?: string | null;
+    isPinned?: boolean;
   }) => void;
 }
 

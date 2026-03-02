@@ -133,6 +133,8 @@ export interface RedisSessionData {
     lastState: string | null;
     runnerId: string | null;
     runnerName: string | null;
+    /** If this session was spawned by another session, the parent's ID */
+    parentSessionId: string | null;
     seq: number;
 }
 
@@ -198,6 +200,7 @@ function parseSessionFromHash(hash: Record<string, string>): RedisSessionData | 
         lastState: hash.lastState || null,
         runnerId: hash.runnerId || null,
         runnerName: hash.runnerName || null,
+        parentSessionId: hash.parentSessionId || null,
         seq: parseInt(hash.seq ?? "0", 10) || 0,
     };
 }
@@ -532,6 +535,27 @@ export async function getTerminalsForRunner(runnerId: string): Promise<RedisTerm
     }
 
     return results;
+}
+
+// ── Pending parent session links ────────────────────────────────────────────
+
+function parentLinkKey(sessionId: string): string {
+    return `${KEY_PREFIX}:parent-link:${sessionId}`;
+}
+
+export async function setPendingParentLink(sessionId: string, parentSessionId: string): Promise<void> {
+    const r = requireRedis();
+    await r.set(parentLinkKey(sessionId), parentSessionId, { EX: RUNNER_LINK_TTL_SECONDS });
+}
+
+export async function getPendingParentLink(sessionId: string): Promise<string | null> {
+    const r = requireRedis();
+    return await r.get(parentLinkKey(sessionId));
+}
+
+export async function deletePendingParentLink(sessionId: string): Promise<void> {
+    const r = requireRedis();
+    await r.del(parentLinkKey(sessionId));
 }
 
 // ── Pending runner links ────────────────────────────────────────────────────

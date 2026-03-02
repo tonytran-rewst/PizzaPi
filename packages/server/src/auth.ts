@@ -120,6 +120,12 @@ export interface UserHiddenModelTable {
     createdAt: string;
 }
 
+export interface UserPinnedSessionTable {
+    userId: string;
+    sessionId: string;
+    pinnedAt: string;
+}
+
 export interface DB {
     user: UserTable;
     session: SessionTable;
@@ -131,6 +137,7 @@ export interface DB {
     push_subscription: PushSubscriptionTable;
     runner_recent_folder: RunnerRecentFolderTable;
     user_hidden_model: UserHiddenModelTable;
+    user_pinned_session: UserPinnedSessionTable;
 }
 
 // ── Instances ─────────────────────────────────────────────────────────────────

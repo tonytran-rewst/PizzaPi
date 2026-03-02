@@ -19,6 +19,10 @@ export interface SessionInfo {
   model: ModelInfo | null;
   runnerId: string | null;
   runnerName: string | null;
+  /** If this session was spawned by another session, the parent's ID */
+  parentSessionId?: string | null;
+  /** Whether the user has pinned this session */
+  isPinned?: boolean;
 }
 
 /** Model provider and identifier */

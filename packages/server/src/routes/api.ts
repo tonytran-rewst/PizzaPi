@@ -11,6 +11,8 @@ import {
     linkSessionToRunner,
     recordRunnerSession,
     registerTerminal,
+    setPendingParentSessionLink,
+    broadcastSessionPinStatus,
 } from "../ws/sio-registry.js";
 import { sendSkillCommand, sendRunnerCommand } from "../ws/namespaces/runner.js";
 import { waitForSpawnAck } from "../ws/runner-control.js";
@@ -19,6 +21,7 @@ import { requireSession, validateApiKey } from "../middleware.js";
 import { listPersistedRelaySessionsForUser } from "../sessions/store.js";
 import { getRecentFolders, recordRecentFolder } from "../runner-recent-folders.js";
 import { getHiddenModels, setHiddenModels } from "../user-hidden-models.js";
+import { pinSession, unpinSession, getPinnedSessionIds } from "../sessions/pinned.js";
 import {
     attachmentMaxFileSizeBytes,
     getStoredAttachment,
@@ -162,6 +165,7 @@ export async function handleApi(req: Request, url: URL): Promise<Response | unde
         const requestedRunnerId = typeof body.runnerId === "string" ? body.runnerId : undefined;
         const requestedCwd = typeof body.cwd === "string" ? body.cwd : undefined;
         const requestedPrompt = typeof body.prompt === "string" ? body.prompt : undefined;
+        const requestedParentSessionId = typeof body.parentSessionId === "string" ? body.parentSessionId : undefined;
         const requestedModel =
             body.model && typeof body.model === "object" &&
             typeof (body.model as any).provider === "string" &&
@@ -216,6 +220,7 @@ export async function handleApi(req: Request, url: URL): Promise<Response | unde
                 ...(requestedPrompt ? { prompt: requestedPrompt } : {}),
                 ...(requestedModel ? { model: requestedModel } : {}),
                 ...(hiddenModels.length > 0 ? { hiddenModels } : {}),
+                ...(requestedParentSessionId ? { parentSessionId: requestedParentSessionId } : {}),
             });
         } catch {
             return Response.json({ error: "Failed to send spawn request to runner" }, { status: 502 });
@@ -230,6 +235,11 @@ export async function handleApi(req: Request, url: URL): Promise<Response | unde
         // Best-effort accounting
         await recordRunnerSession(runnerId, sessionId);
         await linkSessionToRunner(runnerId, sessionId);
+
+        // Store parent session link so it's picked up when the worker registers
+        if (requestedParentSessionId) {
+            await setPendingParentSessionLink(sessionId, requestedParentSessionId);
+        }
 
         // Persist this cwd as a recent folder for the runner (best-effort, fire-and-forget).
         if (requestedCwd) {
@@ -880,9 +890,48 @@ export async function handleApi(req: Request, url: URL): Promise<Response | unde
         return Response.json({ ok: true, hiddenModels });
     }
 
+    // ── Session pinning ──────────────────────────────────────────────────────
+
+    if (url.pathname === "/api/sessions/pinned" && req.method === "GET") {
+        const identity = await requireSession(req);
+        if (identity instanceof Response) return identity;
+
+        const pinnedIds = await getPinnedSessionIds(identity.userId);
+        return Response.json({ pinnedSessionIds: pinnedIds });
+    }
+
+    const pinMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/pin$/);
+    if (pinMatch) {
+        const sessionId = pinMatch[1];
+        const identity = await requireSession(req);
+        if (identity instanceof Response) return identity;
+
+        if (req.method === "POST") {
+            await pinSession(identity.userId, sessionId);
+            // Broadcast pin status change to hub so all connected clients update in real time
+            await broadcastPinStatus(identity.userId, sessionId, true);
+            return Response.json({ ok: true, pinned: true });
+        }
+
+        if (req.method === "DELETE") {
+            await unpinSession(identity.userId, sessionId);
+            await broadcastPinStatus(identity.userId, sessionId, false);
+            return Response.json({ ok: true, pinned: false });
+        }
+    }
+
     return undefined;
 }
 
+
+/** Broadcast a pin status change to all hub clients for a user. */
+async function broadcastPinStatus(userId: string, sessionId: string, isPinned: boolean): Promise<void> {
+    try {
+        await broadcastSessionPinStatus(userId, sessionId, isPinned);
+    } catch {
+        // Best-effort — don't fail the API call if broadcast fails
+    }
+}
 
 /** Safely parse a JSON string that should be an array. Returns [] on failure. */
 export function parseJsonArray(value: string | null | undefined): any[] {

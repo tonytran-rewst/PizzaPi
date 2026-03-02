@@ -14,7 +14,7 @@ import { io } from "socket.io-client";
 import type { HubServerToClientEvents, HubClientToServerEvents } from "@pizzapi/protocol";
 import { formatPathTail } from "@/lib/path";
 import { ProviderIcon } from "@/components/ProviderIcon";
-import { PanelLeftClose, PanelLeftOpen, Plus, User, X, HardDrive, FolderOpen, CheckSquare, Square, CheckCheck, Trash2 } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Plus, User, X, HardDrive, FolderOpen, CheckSquare, Square, CheckCheck, Trash2, BotIcon, Pin, PinOff } from "lucide-react";
 
 interface HubSession {
     sessionId: string;
@@ -32,6 +32,8 @@ interface HubSession {
     model?: { provider: string; id: string; name?: string } | null;
     runnerId?: string | null;
     runnerName?: string | null;
+    parentSessionId?: string | null;
+    isPinned?: boolean;
 }
 
 export type { HubSession };
@@ -52,6 +54,8 @@ export interface SessionSidebarProps {
     onClose?: () => void;
     /** Called when the user confirms ending a session via the swipe gesture */
     onEndSession?: (sessionId: string) => void;
+    /** Called when the user toggles pin state on a session */
+    onPinSession?: (sessionId: string, pinned: boolean) => void;
 }
 
 function formatRelativeDate(isoString: string): string {
@@ -132,6 +136,7 @@ export const SessionSidebar = React.memo(function SessionSidebar({
     onSessionsChange,
     onClose,
     onEndSession,
+    onPinSession,
 }: SessionSidebarProps) {
     const [collapsed, setCollapsed] = React.useState(false);
 
@@ -428,6 +433,8 @@ export const SessionSidebar = React.memo(function SessionSidebar({
                         model: s.model ?? null,
                         runnerId: s.runnerId ?? null,
                         runnerName: s.runnerName ?? null,
+                        parentSessionId: s.parentSessionId ?? null,
+                        isPinned: s.isPinned ?? false,
                     },
                 ];
             });
@@ -438,7 +445,7 @@ export const SessionSidebar = React.memo(function SessionSidebar({
         });
 
         socket.on("session_status", (data) => {
-            const { sessionId, isActive, lastHeartbeatAt, model, sessionName, runnerId, runnerName } = data;
+            const { sessionId, isActive, lastHeartbeatAt, model, sessionName, runnerId, runnerName, parentSessionId, isPinned } = data;
             setLiveSessions((prev) =>
                 prev.map((s) =>
                     s.sessionId === sessionId
@@ -450,6 +457,8 @@ export const SessionSidebar = React.memo(function SessionSidebar({
                               sessionName: sessionName === undefined ? (s.sessionName ?? null) : sessionName,
                               runnerId: runnerId === undefined ? (s.runnerId ?? null) : runnerId,
                               runnerName: runnerName === undefined ? (s.runnerName ?? null) : runnerName,
+                              parentSessionId: parentSessionId === undefined ? (s.parentSessionId ?? null) : parentSessionId,
+                              isPinned: isPinned === undefined ? (s.isPinned ?? false) : isPinned,
                           }
                         : s,
                 ),
@@ -485,9 +494,18 @@ export const SessionSidebar = React.memo(function SessionSidebar({
             runnerMap.get(key)!.sessions.push(s);
         }
 
-        // Step 2: sort sessions within each runner by most recently active/started.
+        // Step 2: sort sessions within each runner.
+        // Priority: pinned first → non-spawned → spawned, then by most recently active/started.
         for (const entry of runnerMap.values()) {
             entry.sessions.sort((a, b) => {
+                const aPinned = a.isPinned ? 1 : 0;
+                const bPinned = b.isPinned ? 1 : 0;
+                if (aPinned !== bPinned) return bPinned - aPinned; // pinned first
+
+                const aSpawned = a.parentSessionId ? 1 : 0;
+                const bSpawned = b.parentSessionId ? 1 : 0;
+                if (aSpawned !== bSpawned) return aSpawned - bSpawned; // non-spawned before spawned
+
                 const aT = Date.parse(a.lastHeartbeatAt ?? a.startedAt);
                 const bT = Date.parse(b.lastHeartbeatAt ?? b.startedAt);
                 return (Number.isFinite(bT) ? bT : 0) - (Number.isFinite(aT) ? aT : 0);
@@ -841,7 +859,7 @@ export const SessionSidebar = React.memo(function SessionSidebar({
                                                         onPointerUp={selectMode ? undefined : handleSessionPointerUp}
                                                         onContextMenu={(e) => e.preventDefault()}
                                                         className={cn(
-                                                            "relative flex items-center gap-2.5 w-full min-w-0 px-2.5 py-3 md:py-2.5 text-left",
+                                                            "group/card relative flex items-center gap-2.5 w-full min-w-0 px-2.5 py-3 md:py-2.5 text-left",
                                                             !hasOffset && "transition-transform duration-200 ease-out",
                                                             selectMode && isChecked
                                                                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -892,30 +910,63 @@ export const SessionSidebar = React.memo(function SessionSidebar({
                                                         {/* Text info */}
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-baseline justify-between gap-1 min-w-0">
-                                                                <span className="truncate text-[0.8rem] font-medium leading-tight">
+                                                                <span className="truncate text-[0.8rem] font-medium leading-tight flex items-center gap-1">
+                                                                    {s.isPinned && (
+                                                                        <Pin className="size-2.5 text-amber-400 flex-shrink-0 inline" />
+                                                                    )}
+                                                                    {s.parentSessionId && (
+                                                                        <BotIcon className="size-3 text-violet-400 flex-shrink-0 inline" />
+                                                                    )}
                                                                     {s.sessionName?.trim() || `Session ${s.sessionId.slice(0, 8)}…`}
                                                                 </span>
-                                                                <span className="text-[0.65rem] text-sidebar-foreground/45 flex-shrink-0">
-                                                                    {timeLabel}
-                                                                </span>
-                                                            </div>
-                                                            {(s.userName || (showCwd && s.cwd)) && (
-                                                                <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                                                                    {s.userName && (
-                                                                        <span className="text-[0.65rem] text-sidebar-foreground/45 truncate">
-                                                                            {s.userName}
-                                                                        </span>
-                                                                    )}
-                                                                    {showCwd && s.cwd && (
-                                                                        <span
-                                                                            className="text-[0.65rem] text-sidebar-foreground/35 truncate"
-                                                                            title={s.cwd}
+                                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                                    {!selectMode && onPinSession && (
+                                                                        <button
+                                                                            className={cn(
+                                                                                "opacity-0 group-hover/card:opacity-100 transition-opacity p-0.5 rounded hover:bg-sidebar-accent",
+                                                                                s.isPinned && "opacity-100",
+                                                                            )}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                onPinSession(s.sessionId, !s.isPinned);
+                                                                            }}
+                                                                            title={s.isPinned ? "Unpin session" : "Pin session"}
                                                                         >
-                                                                            {s.userName ? "·" : ""} {formatPathTail(s.cwd, 2)}
-                                                                        </span>
+                                                                            {s.isPinned ? (
+                                                                                <PinOff className="size-3 text-amber-400" />
+                                                                            ) : (
+                                                                                <Pin className="size-3 text-sidebar-foreground/40" />
+                                                                            )}
+                                                                        </button>
                                                                     )}
+                                                                    <span className="text-[0.65rem] text-sidebar-foreground/45">
+                                                                        {timeLabel}
+                                                                    </span>
                                                                 </div>
-                                                            )}
+                                                            </div>
+                                                            <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                                                                {s.parentSessionId && (
+                                                                    <span className="text-[0.6rem] text-violet-400/70 truncate" title={`Spawned by ${s.parentSessionId}`}>
+                                                                        sub-agent
+                                                                    </span>
+                                                                )}
+                                                                {s.parentSessionId && (s.userName || (showCwd && s.cwd)) && (
+                                                                    <span className="text-[0.6rem] text-sidebar-foreground/25">·</span>
+                                                                )}
+                                                                {s.userName && (
+                                                                    <span className="text-[0.65rem] text-sidebar-foreground/45 truncate">
+                                                                        {s.userName}
+                                                                    </span>
+                                                                )}
+                                                                {showCwd && s.cwd && (
+                                                                    <span
+                                                                        className="text-[0.65rem] text-sidebar-foreground/35 truncate"
+                                                                        title={s.cwd}
+                                                                    >
+                                                                        {(s.userName || s.parentSessionId) ? "·" : ""} {formatPathTail(s.cwd, 2)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </button>
                                                 </div>

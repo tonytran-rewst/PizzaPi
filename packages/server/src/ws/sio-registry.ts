@@ -43,6 +43,9 @@ import {
     setPendingRunnerLink,
     getPendingRunnerLink,
     deletePendingRunnerLink,
+    setPendingParentLink,
+    getPendingParentLink,
+    deletePendingParentLink,
     scanExpiredSessions,
 } from "./sio-state.js";
 import {
@@ -268,6 +271,14 @@ export async function registerTuiSession(
         }
     }
 
+    // Check for pending parent session link (set when this session was spawned by another)
+    const pendingParentId = await getPendingParentLink(sessionId);
+    let parentSessionId: string | null = null;
+    if (pendingParentId) {
+        await deletePendingParentLink(sessionId);
+        parentSessionId = pendingParentId;
+    }
+
     const sessionData: RedisSessionData = {
         sessionId,
         token,
@@ -286,6 +297,7 @@ export async function registerTuiSession(
         lastState: null,
         runnerId,
         runnerName,
+        parentSessionId,
         seq: 0,
     };
 
@@ -327,6 +339,7 @@ export async function registerTuiSession(
             model: null,
             runnerId,
             runnerName,
+            parentSessionId,
         } satisfies SessionInfo,
         userId ?? undefined,
     );
@@ -373,6 +386,7 @@ export async function getSessions(filterUserId?: string): Promise<SessionInfo[]>
             model,
             runnerId: s.runnerId,
             runnerName: s.runnerName,
+            parentSessionId: s.parentSessionId,
         };
     });
 }
@@ -818,8 +832,38 @@ export async function linkSessionToRunner(runnerId: string, sessionId: string): 
             model: modelFromHeartbeat(heartbeat),
             runnerId,
             runnerName: runner.name,
+            parentSessionId: session.parentSessionId,
         },
         session.userId ?? undefined,
+    );
+}
+
+/** Store a pending parent session link so it's picked up when the spawned session registers. */
+export async function setPendingParentSessionLink(sessionId: string, parentSessionId: string): Promise<void> {
+    await setPendingParentLink(sessionId, parentSessionId);
+}
+
+/** Broadcast a pin status change to hub clients for a specific user. */
+export async function broadcastSessionPinStatus(userId: string, sessionId: string, isPinned: boolean): Promise<void> {
+    const session = await getSession(sessionId);
+    if (!session) return;
+
+    const heartbeat = session.lastHeartbeat ? safeJsonParse(session.lastHeartbeat) : null;
+
+    await broadcastToHub(
+        "session_status",
+        {
+            sessionId,
+            isActive: session.isActive,
+            lastHeartbeatAt: session.lastHeartbeatAt,
+            sessionName: session.sessionName,
+            model: modelFromHeartbeat(heartbeat),
+            runnerId: session.runnerId,
+            runnerName: session.runnerName,
+            parentSessionId: session.parentSessionId,
+            isPinned,
+        },
+        userId,
     );
 }
 

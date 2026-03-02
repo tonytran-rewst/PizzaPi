@@ -1950,6 +1950,18 @@ export function App() {
     });
   }, [sendRemoteExec]);
 
+  const handlePinSession = React.useCallback(async (sessionId: string, pinned: boolean) => {
+    try {
+      const method = pinned ? "POST" : "DELETE";
+      await fetch(`/api/sessions/${sessionId}/pin`, {
+        method,
+        credentials: "include",
+      });
+    } catch (err) {
+      console.error("Failed to toggle pin:", err);
+    }
+  }, []);
+
   const requestResumeSessions = React.useCallback(() => {
     if (!activeSessionRef.current) return false;
     setResumeSessionsLoading(true);
@@ -2593,6 +2605,7 @@ export function App() {
             onSessionsChange={setLiveSessions}
             onClose={() => setSidebarOpen(false)}
             onEndSession={handleEndSession}
+            onPinSession={handlePinSession}
           />
         </div>
 
